@@ -223,8 +223,8 @@ cores = min(cores, Nchains)
 cl <- makeCluster(cores[1])
 registerDoParallel(cl)
 
-data <- list(Hits=Nhits,Wts=Wts,NObs=NObs,Site=SiteN,NSite=NSite,
-             Yr=YearN,Period=PeriodN,Nyrs=Nyrs,Nprs=NPeriod,moon=Moon,
+data <- list(Hits=Nhits,True=Wts,NObs=NObs,Site=SiteN,NSite=NSite,
+             Yr=YearN,Tpr=PeriodN,Nyrs=Nyrs,Nprs=NPeriod,moon=Moon,
              FS=FS,LA=LA,CL=CL,BU=BU,Bpar1=Bpar1,Bpar2=Bpar2) 
 
 # Inits: Best to generate initial values using function

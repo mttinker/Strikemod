@@ -2,91 +2,37 @@ model{
 # Set Priors
 Cmean ~ dgamma(1,.5) T(0.00001,100)# grand mean of log Call Rate, across all strata
 Dispers ~ dlnorm(0,2)
-theta ~ dnorm(0,.01)  # Effect of moon illumination (1 = full moon, -1 = new moon)
-sigT ~ dlnorm(-1,4)   # temporal variance term, call freq
-sigN ~ dunif(0.001,100) # variance in call rate across strata
-sigS ~ dunif(0.001,100) # variance in call rate, sites within strata
-sigW ~ dunif(0.001,100) # variance in call rate across weeks within site
+theta ~ dnorm(0,.01)  # Effect of moon illumination (1 = full moon, 0 = new moon)
+sigY ~ dlnorm(-1,4)   # seasonal variance term, across years
+sigT ~ dlnorm(-1,4)   # temporal variance term, across time periods
+sigS ~ dunif(0.01,100) # variance across sites
 #
+tauY <- pow(sigY,-2)
 tauT <- pow(sigT,-2)
-# tauN <- pow(sigN,-2)
-# tauS <- pow(sigS,-2)
-Vn <- sigN^2 
-Vs <- sigS^2 	
-Vw <- sigW^2
-muW <- log(1/sqrt(1+Vw))
-tauW <- 1/(log(1+Vw))
-#
-# Temporal effect matrix, weeks x timesteps (15 min) 
-Temporal[1,1] ~ dunif(-8,-5) 
-Temporal[2,1] ~ dnorm(Temporal[1,1],tauT) T(-8,8)
-Temporal[1,2] ~ dnorm(Temporal[1,1],tauT) T(-8,8) 
-for (i in 3:NWeeks) {
-    diff.F[i] <- 2*Temporal[i-1,1]-Temporal[i-2,1]
-    Temporal[i,1] ~ dnorm(diff.F[i],tauT) T(-8,8)
-}
-for (i in 3:NTsteps) {
-    diff.H[i] <- 2*Temporal[1,i-1]-Temporal[1,i-2]
-    Temporal[1,i] ~ dnorm(diff.H[i],tauT) T(-8,8)
-}
-for (i in 2:NWeeks) {
-    for (j in 2:NTsteps) {
-       diff.T[i,j] <- (Temporal[i-1,j-1] + (Temporal[i,j-1]-Temporal[i-1,j-1]) 
-                       + (Temporal[i-1,j]-Temporal[i-1,j-1]))
-	   # diff.T[i,j] <- ifelse(TP[i,j]==1,max(1,diff.Tstar[i,j]),diff.Tstar[i,j])				
-       Temporal[i,j] ~ dnorm(diff.T[i,j],tauT) 
-    }
-}
-# Next loop ensures maximum of Temp matrix --> 1
-maxTmprl <- max(Temporal)
-for (i in 1:100){
-	TmprlMax[i] ~ dnorm(maxTmprl,4)
-}
-for(i in 1:NWeeks){
-    for (j in 1:NTsteps){
-	   Temp[i,j] <- ilogit(Temporal[i,j])
-	   Temppk[i,j] <- Temp[i,j]*TP[i,j]
-	}
-}
-peakTemp <- sum(Temppk)/lngthpeak # mean adjustment for peak period
-# Calculate mean call rate "C" by strata
-muN <- log(Cmean/sqrt(1+Vn/Cmean^2))
-tauN <- 1/(log(1+ Vn/Cmean^2))
-for (k in 1:Nstrata){
-    # Mean max call rate for strata k
-	# Cstrat[k] ~ dnorm(Cmean,tauN) T(0.000001,10)  # Normal  
-	Cstrat[k] ~ dlnorm(muN,tauN) T(0.000001,100) # Lognormal
-	# params for log normal dist of C across sites within strata k
-	muS[k] <- log(Cstrat[k]/sqrt(1+Vs/Cstrat[k]^2))
-    tauS[k] <- 1/(log(1+ Vs/Cstrat[k]^2))
-}
-## Calculate site-level mean call rate (Cs) accounting for site var
-for (i in 1:NSite){    
-    # Mean expected max call rate for site S     
-    # Csite[i] ~ dnorm(C[strat[i]],tauS) T(0,)  # Normal 
-    Csite[i] ~ dlnorm(muS[strat[i]],tauS[strat[i]])   # Lognormal
-    # Mean peak period call rate for site S
-    Cs[i] <- Csite[i]*peakTemp 
-    for(j in 1:Numweeks[i]){
-		# Weekly variance within site: epsilon = error multiplier, mean of 1
-		eps[Strtweek[i]+j-1,i] ~ dlnorm(muW,tauW)
-	}   
+tauS <- pow(sigS,-2)
+# Parameters for Signal Quality portion of logit function
+for (q in 1:8){
+	B[q] ~ dnorm(Bpar1[q],Bpar2[q])	
+}	
+# Diel Period effects
+for (p in 1:Nprs){
+	Teff[p] ~ dnorm(0,tauT)	
+}	
+# Seasonal or Annual Effects
+for (y in 1:Nyrs){
+	Yeff[y] ~ dnorm(0,tauY)	
+}	
+## Site-level random effects
+for (s in 1:NSite){    
+   Seff[s] ~ dnorm(0,tauS)
  }
- # Estimate mean expected peak period call rates for each strata
- for (k in 1:Nstrata){
-    C[k] <- mean(Cs[indxS1[k]:indxS2[k]])
- } 
- # mean peak period call rate across all strata 
-C0 <- mean(C[1:Nstrata])
 # Cycle through acoustic monitoring data for Observed Calls 
 for (i in 1:NObs){
     # Mean expected detected calls per minute in the timestep (15min)
-	mu[i] <- Csite[SiteN[i]]*Temp[Wk[i],TS[i]]*exp(theta*moon[i])*Minutes[i]*eps[Wk[i],SiteN[i]]
-    # Variance in detected calls (accounts for overdispersion)
-    vr[i] <- ifelse(mu[i]<0,0.0000001, mu[i] + (mu[i]^2)/Dispers)
-    p[i] <- max(0.00000001,1-(vr[i]-mu[i])/vr[i])
-    # Observed number calls recorded as neg binomial random variate
-    Calls[i] ~ dnegbin(p[i],Dispers)    
+	# First, determine ProbDetection based on signal quality - lofit function
+	Baseprob[i] <- B[1]+B[2]*FS[i]+B[3]*FS[i]^2+B[4]*FS[i]^3+B[5]*LA[i]+B[6]*BU[i]+B[7]*CL[i]+B[8]*FS[i]*LA[i]  	
+	Prob[i] <-ilogit(Baseprob[i] + theta*moon[i] + Yeff[Yr[i]] + Teff[Tpr[i]] + Seff[Site[i]])
+	Hits[i] ~ dbin(Prob[i],True[i])
 }
 }
 
