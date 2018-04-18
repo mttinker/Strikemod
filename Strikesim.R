@@ -24,7 +24,7 @@ TrueNhits = 10
 # Process user input and import data ----------------------------------------
 existing_Packages<-as.list(installed.packages()[,1])
 # Add new packages you might need to this line, to check if they're installed and install missing packages
-required_Packages<-c("rstudioapi","readxl","lubridate","stringr","gtools","coda",
+required_Packages<-c("rstudioapi","readxl","lubridate","stringr","gtools","coda","mcmcplots",
                      "lattice","rjags","jagsUI","parallel","doParallel","fitdistrplus","ggplot2")
 missing_Packages<- required_Packages[!required_Packages%in% existing_Packages]
 if(length(missing_Packages)>0)install.packages(pkgs =  missing_Packages)
@@ -42,8 +42,8 @@ library(jagsUI)
 library(parallel)
 library(doParallel)
 library(fitdistrplus)
+library(mcmcplots)
 library(ggplot2)
-
 rm('existing_Packages')
 rm('missing_Packages')
 rm('required_Packages')
@@ -98,6 +98,7 @@ if (Envdata!=''){
   Edat = read.csv(file = loadfile2, header = TRUE, sep = ",")
 }
 # Process variables  -----------------------------------------------------
+Nsim =  Totalreps/Nchains + Nburnin  # Total # MCMS sims: Actual saved reps = (Nsim-Nburnin) * (num Cores)
 attach(data)
 #
 Nobs = dim(data)[1]
@@ -189,25 +190,25 @@ for(j in c(0.01,.3)){
     }
   }
 }
-thrdvar = 'Burst'
 newdat$prob = predict(model, newdata = newdat, type = "response")
-xx = seq(10,100,length.out = 20); yy = seq(.5,4,length.out = 20)
-library(lattice)
-levelplot(Prob1, data = NULL, aspect = "fill",
-          xlim = c(0,100),ylim = c(0.5,4),
-          row.values = xx, column.values = yy,
-          xlab = 'Flux Sensitive', ylab = 'Level Absolute',
-          main= paste0(thrdvar, '= low'))
-levelplot(Prob2, data = NULL, aspect = "fill",
-          xlim = c(0,100),ylim = c(0.5,4),
-          row.values = xx, column.values = yy,
-          xlab = 'Flux Sensitive', ylab = 'Level Absolute',
-          main= paste0(thrdvar, '= high'))
+# thrdvar = 'Burst'
+# xx = seq(10,100,length.out = 20); yy = seq(.5,4,length.out = 20)
+# library(lattice)
+# levelplot(Prob1, data = NULL, aspect = "fill",
+#           xlim = c(0,100),ylim = c(0.5,4),
+#           row.values = xx, column.values = yy,
+#           xlab = 'Flux Sensitive', ylab = 'Level Absolute',
+#           main= paste0(thrdvar, '= low'))
+# levelplot(Prob2, data = NULL, aspect = "fill",
+#           xlim = c(0,100),ylim = c(0.5,4),
+#           row.values = xx, column.values = yy,
+#           xlab = 'Flux Sensitive', ylab = 'Level Absolute',
+#           main= paste0(thrdvar, '= high'))
 # Extract coefficients and std erros as priors for Bayesian model
-Bpar1 =  summary(model)$coefficients[, 1] #
-Bpar2 =  summary(model)$coefficients[, 2]
-# Convert standard erros of param estimates to precision values
-Bpar2 = 1/Bpar2^2
+Bpar1 =  summary(model)$coefficients[, 1] # Mean param estimats
+Bpar2 =  summary(model)$coefficients[, 2] # Std Err of param estimates
+# Convert standard errors of param estimates to precision values
+Bpar2 = 1/(2*Bpar2)^2
 
 # Set up JAGS -------------------------------------------------------------
 
@@ -223,19 +224,18 @@ cores = min(cores, Nchains)
 cl <- makeCluster(cores[1])
 registerDoParallel(cl)
 
-data <- list(Hits=Nhits,True=Wts,NObs=NObs,Site=SiteN,NSite=NSite,
-             Yr=YearN,Tpr=PeriodN,Nyrs=Nyrs,Nprs=NPeriod,moon=Moon,
-             FS=FS,LA=LA,CL=CL,BU=BU,Bpar1=Bpar1,Bpar2=Bpar2) 
+data <- list(Hits=Nhits,True=Wts,NObs=Nobs,Site=SiteN,NSite=NSite,
+             Tpr=PeriodN,Nprs=NPeriod,moon=Moon,
+             FS=FS,LA=LA,CL=CL,BU=BU,Bpar1=Bpar1,Bpar2=Bpar2) # Yr=YearN,Nyrs=Nyrs,
 
 # Inits: Best to generate initial values using function
 inits <- function(){
-  list(sigT=runif(1,0.3,0.6),sigN=runif(1,1,5),sigS=runif(1,2,10),sigW=runif(1,.1,.5),
-       theta=runif(1,-.1,.1),Dispers=runif(1,.15,.25))
+  list(sigT=runif(1,.1,.5),sigS=runif(1,.1,.5),
+       theta=runif(1,-.1,.1)) # sigY=runif(1,0.1,0.5),
 }
 # List of parameters to monitor:
-params <- c('theta','sigT','sigS','sigN','sigW','Dispers','peakTemp',
-            'C0','C','Cs','Csite','B','Temp','eps') # 
-
+params <- c('theta','sigT','sigS',
+            'Yeff','Teff','Seff','B') # 
 
 # Run JAGS ----------------------------------------------------------------
 
@@ -269,5 +269,78 @@ s_quantiles = data.frame(s$quantiles)
 # Vardev = s_stats["deviance",2]^2; pd = Vardev/2;
 # DIC = Deviance + 2*pd
 save(list = ls(all.names = TRUE),file=SaveResults)
+
+pfp = c(which(params=='theta'),which(startsWith(params,'sig'))) #,which(params=='Yeff')
+
+for (i in pfp){
+  parnm = params[i]
+  traplot(out,parnm)
+  denplot(out,parnm,ci=.9,collapse = TRUE)
+}
+
+# Effect plots ------------------------------------------------------------
+parnum = which(params=='Teff')
+Levlabels = as.character(Periodlist$Period)
+caterplot(out,params[parnum],denstrip = FALSE, reorder=FALSE,
+          quantiles=list(outer=c(0.025,0.975),inner=c(0.1666,0.8333)),lwd=c(.1,4),
+          labels=Levlabels, labels.loc = 'above',las = 0, cex.labels = .8)
+title(main = "Effect of time period", font.main = 4)
+
+parnum = which(params=='Seff')
+Levlabels = as.character(Sitelist$Site)
+caterplot(out,params[parnum],denstrip = FALSE, reorder=FALSE,
+          quantiles=list(outer=c(0.025,0.975),inner=c(0.1666,0.8333)),lwd=c(.1,4),
+          labels=Levlabels, labels.loc = 'above',las = 0, cex.labels = .8)
+title(main = "Effect of Site", font.main = 4)
+
+B = s_stats$Mean[which(startsWith(vn,"B["))]
+intcpt = numeric(length = 800)
+FS1 = intcpt; FS2 = intcpt; FS3 = intcpt; CL1 = intcpt; 
+LA1 = intcpt; BU = intcpt; FSLA = intcpt; Prob = intcpt; 
+intcpt = 1+intcpt 
+Prob1 = matrix(nrow=20,ncol=20)
+Prob2 = matrix(nrow=20,ncol=20)
+cntr = 0
+cntrC = 0
+for(j in c(0.01,.3)){
+  cntrx = 0
+  cntrC = cntrC +1
+  for(f in seq(10,100,length.out = 20)){
+    cntrx = cntrx+1
+    cntry = 0    
+    for(l in seq(.5,4,length.out = 20)){
+      cntry = cntry+1
+      cntr = cntr+1
+      FS1[cntr]=f
+      FS2[cntr]=f^2
+      FS3[cntr]=f^3
+      LA1[cntr]=l
+      BU[cntr]=j
+      CL1[cntr]=.001
+      FSLA[cntr]=f*l
+      Prob[cntr] = min(1,inv.logit(B[1]+B[2]*FS1[cntr]+B[3]*FS2[cntr]+B[4]*FS3[cntr]+
+                                         B[5]*LA1[cntr]+B[6]*BU[cntr]+B[7]*CL1[cntr]+B[8]*FSLA[cntr]))
+      if (cntrC == 1){
+        Prob1[cntrx,cntry] = Prob[cntr]
+      }else{
+        Prob2[cntrx,cntry] = Prob[cntr]
+      }
+    }
+  }
+}
+xx = seq(10,100,length.out = 20); yy = seq(.5,4,length.out = 20)
+plt = levelplot(Prob1, data = NULL, aspect = "fill",
+                xlim = c(10,100),ylim = c(0.5,4),
+                row.values = xx, column.values = yy,
+                xlab = 'Flux Sensitive', ylab = 'Level Absolute+5',
+                main="Call Detection Prob, Low Burst (log(1+Burst)*10=0.01)")
+print(plt)
+
+plt = levelplot(Prob2, data = NULL, aspect = "fill",
+                xlim = c(10,100),ylim = c(0.5,4),
+                row.values = xx, column.values = yy,
+                xlab = 'Flux Sensitive', ylab = 'Level Absolute+5',
+                main="Call Detection Prob, High Burst (log(1+Burst)*10=0.3)")
+print(plt)
 
 

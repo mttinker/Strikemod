@@ -1,13 +1,12 @@
 model{
 # Set Priors
-Cmean ~ dgamma(1,.5) T(0.00001,100)# grand mean of log Call Rate, across all strata
-Dispers ~ dlnorm(0,2)
 theta ~ dnorm(0,.01)  # Effect of moon illumination (1 = full moon, 0 = new moon)
-sigY ~ dlnorm(-1,4)   # seasonal variance term, across years
-sigT ~ dlnorm(-1,4)   # temporal variance term, across time periods
-sigS ~ dunif(0.01,100) # variance across sites
+# Variance terms, drawn from half-Cauchy distributions
+# sigY ~ dt(0, 1 ,1) T(0,) # seasonal variance term, across years (not significant)
+sigT ~ dt(0, .25 ,1) T(0,) # temporal variance term, across time periods
+sigS ~ dt(0, .25 ,1) T(0,) # variance across sites
 #
-tauY <- pow(sigY,-2)
+# tauY <- pow(sigY,-2)
 tauT <- pow(sigT,-2)
 tauS <- pow(sigS,-2)
 # Parameters for Signal Quality portion of logit function
@@ -19,9 +18,9 @@ for (p in 1:Nprs){
 	Teff[p] ~ dnorm(0,tauT)	
 }	
 # Seasonal or Annual Effects
-for (y in 1:Nyrs){
-	Yeff[y] ~ dnorm(0,tauY)	
-}	
+# for (y in 1:Nyrs){
+	# Yeff[y] ~ dnorm(0,tauY)	
+# }	
 ## Site-level random effects
 for (s in 1:NSite){    
    Seff[s] ~ dnorm(0,tauS)
@@ -31,7 +30,7 @@ for (i in 1:NObs){
     # Mean expected detected calls per minute in the timestep (15min)
 	# First, determine ProbDetection based on signal quality - lofit function
 	Baseprob[i] <- B[1]+B[2]*FS[i]+B[3]*FS[i]^2+B[4]*FS[i]^3+B[5]*LA[i]+B[6]*BU[i]+B[7]*CL[i]+B[8]*FS[i]*LA[i]  	
-	Prob[i] <-ilogit(Baseprob[i] + theta*moon[i] + Yeff[Yr[i]] + Teff[Tpr[i]] + Seff[Site[i]])
+	Prob[i] <-ilogit(Baseprob[i] + theta*moon[i] + Teff[Tpr[i]] + Seff[Site[i]]) # + Yeff[Yr[i]]
 	Hits[i] ~ dbin(Prob[i],True[i])
 }
 }
