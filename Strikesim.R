@@ -15,7 +15,7 @@ ProjectYear =  2018  # Year of analysis project
 # Nsims = 100
 Jagsfile = 'Jags_Strikesim.jags'
 Nchains = 20
-Nburnin =  1500  # Number of burn-in reps Total reps = (Nsim-Nburnin) * (num Cores)
+Nburnin =  500  # Number of burn-in reps Total reps = (Nsim-Nburnin) * (num Cores)
 Nadapt =  100  # Number of adapting reps, default 100
 Totalreps = 5000 # Total desired reps (ie # simulations making up posterior)
 TrueNhits = 10
@@ -101,7 +101,7 @@ if (Envdata!=''){
 Nsim =  Totalreps/Nchains + Nburnin  # Total # MCMS sims: Actual saved reps = (Nsim-Nburnin) * (num Cores)
 attach(dat)
 #
-Nobs = dim(data)[1]
+Nobs = dim(dat)[1]
 Nhits = hits
 Wts = integer(length=Nobs) + TrueNhits
 NightN = NightOfYear
@@ -211,7 +211,8 @@ if(plotGLMmod==1){
 Bpar1 =  summary(model)$coefficients[, 1] # Mean param estimats
 Bpar2 =  summary(model)$coefficients[, 2] # Std Err of param estimates
 # Convert standard errors of param estimates to precision values
-Bpar2 = 1/(2*Bpar2)^2
+# for JAGS priors: increase error (uncertainty) by 3x
+Bpar2 = 1/(3*Bpar2)^2
 #
 # Set up JAGS -------------------------------------------------------------
 #
@@ -233,11 +234,11 @@ data <- list(Hits=Nhits,True=Wts,NObs=Nobs,Site=SiteN,NSite=NSite,
 #
 # Inits: Best to generate initial values using function
 inits <- function(){
-  list(sigT=runif(1,.1,.5),sigS=runif(1,.1,.5),
+  list(sigT=runif(1,.2,.7),sigS=runif(1,.2,.7),
        theta=runif(1,-.1,.1)) # sigY=runif(1,0.1,0.5),
 }
 # List of parameters to monitor:
-params <- c('theta','sigT','sigS',
+params <- c('theta','gam','sigT','sigS',
             'Yeff','Teff','Seff','B') # 
 #
 # Run JAGS ----------------------------------------------------------------
@@ -246,10 +247,12 @@ params <- c('theta','sigT','sigS',
 #  in params since they take up too much memory and it crashes
 # To get Temporal matrix, use jags.basic() to save just basic mcmc list
 #  which uses much less memory but does not save associated stats & DIC
+load.module("mix")
 out <- jags.basic(data = data,
                   inits = inits,
                   parameters.to.save = params,
                   model.file = Jagsfile,
+                  modules=c('mix'),
                   n.chains = Nchains,
                   n.adapt = Nadapt,
                   n.iter = Nsim,
@@ -274,7 +277,7 @@ s_quantiles = data.frame(s$quantiles)
 # DIC = Deviance + 2*pd
 save(list = ls(all.names = TRUE),file=SaveResults)
 #
-pfp = c(which(params=='theta'),which(startsWith(params,'sig'))) #,which(params=='Yeff')
+pfp = c(which(params=='gam'),which(startsWith(params,'sig')),which(params=='theta')) #,which(params=='Yeff')
 #
 for (i in pfp){
   parnm = params[i]
