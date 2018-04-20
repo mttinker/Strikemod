@@ -19,8 +19,8 @@ EVtype = 1       # Type of Environmental variable (EV), 1 = categorical, 2 = con
 EVeff = -0.1    # True effect of EV on Strike Detection (-.1 = 10% lower prob per unit incr. in EV)
 EVfrq = .5       # If EV is categorical (1-0 var, e.g. rain), expected frequencey that EV = 1 
 EVsd = 1         # If EV is continuous (centered so mean=0), std dev of values (default=1, use "scale()")
-NSiteA = 15      # Total Number of Sites Monitored 
-RecPsite = c(20,200) # Number of experimental trials per site, c(min, max)
+NSiteA = 10      # Total Number of Sites Monitored 
+RecPsite = c(10,200) # Number of experimental trials per site, c(min, max)
 P_signif = 0.95     # Desired level of certainty for CI and P values
 
 # END USER SPECIFIED PARAMETERS ---------------------------------------------
@@ -179,7 +179,7 @@ for (r in 1:simreps){
   }else{
     Sigcriteria = 0
   }
-  if(Sigcriteria == 1 & phiest>sP_quantiles[pp,1] & phiest<sP_quantiles[pp,5]){
+  if(Sigcriteria == 1 & phiT>sP_quantiles[pp,1] & phiT<sP_quantiles[pp,5]){
     Signif[r] = 1
   }else{
     Signif[r] = 0
@@ -192,9 +192,13 @@ for (i in pfp){
   traplot(outP,parnm)
   denplot(outP,parnm,ci=.9,collapse = TRUE)
 }
+#
 if (sum(Signif)==0){
   print("The specified effect size cannot be reliably detected with the current range of sample sizes")
   print(" (there is insufficient Power). Either increase sample size or specify larger effect.")
+}else if(sum(Signif)==simreps){
+  print("The specified effect size can be reliably detected with the entire range of sample sizes")
+  print(" evaluated (there is sufficient Power). ")
 }else{
   dfP = data.frame(Ssize = sampsize, SsizeT = sampsizeT, Signif = Signif)
   fitP = glm(Signif ~ Ssize, family = binomial, data = dfP)
