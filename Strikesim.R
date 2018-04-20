@@ -15,7 +15,7 @@ ProjectYear =  2018  # Year of analysis project
 # Nsims = 100
 Jagsfile = 'Jags_Strikesim.jags'
 Nchains = 20
-Nburnin =  500  # Number of burn-in reps Total reps = (Nsim-Nburnin) * (num Cores)
+Nburnin =  1000  # Number of burn-in reps Total reps = (Nsim-Nburnin) * (num Cores)
 Nadapt =  100  # Number of adapting reps, default 100
 Totalreps = 5000 # Total desired reps (ie # simulations making up posterior)
 TrueNhits = 10
@@ -209,10 +209,11 @@ if(plotGLMmod==1){
 }
 # Extract coefficients and std erros as priors for Bayesian model
 Bpar1 =  summary(model)$coefficients[, 1] # Mean param estimats
-Bpar2 =  summary(model)$coefficients[, 2] # Std Err of param estimates
+Bpar2s =  summary(model)$coefficients[, 2] # Std Err of param estimates
+Bpar2vg = 1*abs(Bpar1)
 # Convert standard errors of param estimates to precision values
-# for JAGS priors: increase error (uncertainty) by 3x
-Bpar2 = 1/(3*Bpar2)^2
+# for JAGS priors: use vague priors, CV = 1
+Bpar2 = 1/Bpar2vg^2
 #
 # Set up JAGS -------------------------------------------------------------
 #
@@ -239,7 +240,7 @@ inits <- function(){
 }
 # List of parameters to monitor:
 params <- c('theta','gam','sigT','sigS',
-            'Yeff','Teff','Seff','B') # 
+            'Teff','Seff','B') # 
 #
 # Run JAGS ----------------------------------------------------------------
 #
@@ -354,7 +355,7 @@ plt2 = levelplot(Prob2, data = NULL, aspect = "fill",
                 main="Effect of Signal, Flux Sensitive X Level Absolute, High Burst",
                 sub="(log(1+Burst)*10=0.3)",font.sub = 2)
 print(plt2)
-
+#
 FSi = mean(FS)
 LAi = mean(LA)
 BUi = mean(BU)
@@ -363,10 +364,10 @@ B = s_stats$Mean[which(startsWith(vn,"B["))]
 theta = s_stats$Mean[which(startsWith(vn,"theta"))]
 iii = which(Periodlist$Period=="SS15" | Periodlist$Period=="Midnight" | Periodlist$Period=="SR15")
 BaseProb_lgt = B[1]+B[2]*FSi+B[3]*FSi^2+B[4]*FSi^3+B[5]*LAi+B[6]*BUi+B[7]*CLi+B[8]*FSi*LAi
-Seff = s_stats$Mean[which(startsWith(vn,"Teff"))]
-SS15eff = Seff[iii[1]]
-Midnteff = Seff[iii[2]]
-SR15eff = Seff[iii[3]]
+Teff = s_stats$Mean[which(startsWith(vn,"Teff"))]
+SS15eff = Teff[iii[1]]
+Midnteff = Teff[iii[2]]
+SR15eff = Teff[iii[3]]
 ProbDetect = numeric()
 ProbDetect[1] = inv.logit(BaseProb_lgt + SS15eff)
 ProbDetect[2] = inv.logit(BaseProb_lgt + Midnteff)
@@ -379,10 +380,10 @@ ii = which(startsWith(vn,"B["))
 B = outdf[,ii]
 theta = outdf[,startsWith(vn,"theta")]
 BaseProb_lgt = B[,1]+B[,2]*FSi+B[,3]*FSi^2+B[,4]*FSi^3+B[,5]*LAi+B[,6]*BUi+B[,7]*CLi+B[,8]*FSi*LAi
-Seff = outdf[,which(startsWith(vn,"Teff"))]
-SS15eff = Seff[,iii[1]]
-Midnteff = Seff[,iii[2]]
-SR15eff = Seff[,iii[3]]
+Teff = outdf[,which(startsWith(vn,"Teff"))]
+SS15eff = Teff[,iii[1]]
+Midnteff = Teff[,iii[2]]
+SR15eff = Teff[,iii[3]]
 PrbDtct[,1] = inv.logit(BaseProb_lgt + SS15eff)
 PrbDtct[,2] = inv.logit(BaseProb_lgt + Midnteff)
 PrbDtct[,3] = inv.logit(BaseProb_lgt + SR15eff)

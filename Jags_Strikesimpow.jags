@@ -1,0 +1,38 @@
+model{
+# Set Priors
+theta ~ dnorm(0,.01)  # Effect of moon illumination (1 = full moon, 0 = new moon)
+# Variance terms, drawn from half-Cauchy distributions
+gam ~ dt(0, 100 ,1) T(0,)   # dispersion parameter (inflates sample variance for beta-binomial)
+sigT ~ dt(0, .25 ,1) T(0,) # temporal variance term, across time periods
+sigS ~ dt(0, .25 ,1) T(0,) # variance across sites
+tauT <- pow(sigT,-2)
+tauS <- pow(sigS,-2)
+# Param for Environmental Var effect
+phi ~ dnorm(0,.01) 
+# Parameters for Signal Quality portion of logit function
+for (q in 1:8){
+	B[q] ~ dnorm(Bpar1[q],Bpar2[q])	
+}	
+# Diel Period effects
+for (p in 1:Nprs){
+	Teff[p] ~ dnorm(0,tauT)	
+}	
+# Site-level random effects
+for (s in 1:NSite){    
+   Seff[s] ~ dnorm(0,tauS)
+ }
+# Cycle through acoustic monitoring data for Observed experiments 
+for (i in 1:NObs){
+    # Calculate expected vs observed number detected strikes (given True number)
+	# First, determine baseline logit Prob of Detection given signal quality 
+	Baseprob[i] <- B[1]+B[2]*FS[i]+B[3]*FS[i]^2+B[4]*FS[i]^3+B[5]*LA[i]+B[6]*BU[i]+B[7]*CL[i]+B[8]*FS[i]*LA[i]  	
+	# Calculate mean expected probability, mu 
+	mu[i] <-ilogit(Baseprob[i] + theta*moon[i] + Teff[Tpr[i]] + Seff[Site[i]] + phi*EV[i]) # + Yeff[Yr[i]]
+	# Calculate a and b params for beta dist with mean of mu and dispersion gam
+	a[i] <- mu[i]/gam 
+	b[i] <- (1-mu[i])/gam
+	# Observed hits given True hits, drawn from beta-binomial distribution 
+	Hits[i] ~ dbetabin(a[i], b[i], True[i])	
+}
+}
+
