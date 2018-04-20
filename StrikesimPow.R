@@ -1,4 +1,4 @@
-# Strike simulation experiment Power analysis
+# Strike simulation experiment Power analysis: Power to Detect an Environmental Co-variate
 rm(list = ls())
 gc()
 # USER SPECIFIED PARAMETERS -------------------------------------------------
@@ -16,9 +16,9 @@ JagsfileP = 'Jags_Strikesimpow.jags'
 # Set parameters for Power Analysis
 simreps = 10       # Number reps for Power analysis (recomend at least 10)
 EVtype = 1       # Type of Environmental variable (EV), 1 = categorical, 2 = continuous
-EVeff = -0.1    # True effect of EV on Detection (-.1 = 10% lower prob per unit incr. in EV)
-EVfrq = .5       # If EV categorical (1-0 var, e.g. rain), the frequencey that EV = 1 
-EVsd = 1         # If EV continuous (scaled to mean=0), std dev of values (default=1, use "scale()")
+EVeff = -0.1    # True effect of EV on Strike Detection (-.1 = 10% lower prob per unit incr. in EV)
+EVfrq = .5       # If EV is categorical (1-0 var, e.g. rain), expected frequencey that EV = 1 
+EVsd = 1         # If EV is continuous (centered so mean=0), std dev of values (default=1, use "scale()")
 NSiteA = 15      # Total Number of Sites Monitored 
 RecPsite = c(20,200) # Number of experimental trials per site, c(min, max)
 P_signif = 0.95     # Desired level of certainty for CI and P values
